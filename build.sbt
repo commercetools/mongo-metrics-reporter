@@ -14,7 +14,8 @@ scalacOptions ++= Seq("-deprecation", "-feature")
 libraryDependencies ++= Seq(
   "com.netflix.rxjava" % "rxjava-scala" % "0.18.3",
   "org.reactivemongo" %% "reactivemongo" % "0.10.0",
-  "org.scalaz" %% "scalaz-core" % "7.1.0"
+  "org.scalaz" %% "scalaz-core" % "7.1.0",
+  "com.typesafe" % "config" % "1.2.1"
 )
 
 mainClass in (Compile, packageBin) := Some("io.sphere.graphite.MongoLockReporter")
