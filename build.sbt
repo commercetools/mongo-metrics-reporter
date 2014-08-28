@@ -3,7 +3,7 @@ import sbt.Keys._
 
 name := "mongodb-graphite-lock-stats"
 
-organization := "io.sphere"
+organization := "de.commercetools"
 
 version := "0.1-SNAPSHOT"
 
