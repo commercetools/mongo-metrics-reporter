@@ -1,14 +1,17 @@
-package io.sphere.graphite
+package de.commercetools.graphite
 
 import java.util.concurrent.TimeUnit
 import play.api.libs.iteratee.Iteratee
 import reactivemongo.api._
 import reactivemongo.api.collections.default.BSONCollection
-import reactivemongo.bson.BSONDocument
+import reactivemongo.bson.{BSONValue, BSONDocument}
 import reactivemongo.core.actors.Close
+import reactivemongo.utils.LazyLogger
+import rx.lang.scala.Observable
 import scala.concurrent.ExecutionContext.Implicits.global
 import reactivemongo.core.commands.Status
 import FutureHelper._
+import scala.concurrent.duration._
 
 import com.typesafe.config.{ConfigFactory, Config}
 
@@ -17,6 +20,7 @@ import scala.concurrent.{Await, Future}
 
 object MongoLockReporter extends App {
   val config = new Conf(ConfigFactory.load())
+  val logger = LazyLogger("de.commercetools.MongoLockReporter")
 
   init()
 
@@ -24,13 +28,24 @@ object MongoLockReporter extends App {
     println(s"Starting mongo locking reporting to ${config.graphite.host}:${config.graphite.port} with interval ${config.reportIntervalMs} ms...")
 
     val driver = new MongoDriver
-    val connection = driver.connection(config.mongo.host :: Nil)
+    val connection = driver.connection(config.mongo.url :: Nil)
 
-    val adminDb = connection("admin")
-
-    println(adminDb.command(Status().command).awaitForever)
-    closeDriver(driver)
+    Observable.interval(config.reportIntervalMs milliseconds).flatMap(_ => Observable.from(getStats(connection))).subscribe(
+      onNext = sendToGraphite,
+      onError = error => {
+        error.printStackTrace()
+        closeDriver(driver)
+      },
+      onCompleted = () => closeDriver(driver)
+    )
   }
+
+  def sendToGraphite(stats: Map[String, BSONValue]) = {
+    println("Sending!!!")
+  }
+
+  def getStats(connection: MongoConnection) =
+    connection("admin").command(Status().command).map(_.asInstanceOf[Map[String, BSONValue]])
 
   def closeDriver(driver: MongoDriver): Unit = {
     driver.connections.foreach(_.mongosystem ! Close)

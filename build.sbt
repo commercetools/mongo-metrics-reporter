@@ -18,7 +18,7 @@ libraryDependencies ++= Seq(
   "com.typesafe" % "config" % "1.2.1"
 )
 
-mainClass in (Compile, packageBin) := Some("io.sphere.graphite.MongoLockReporter")
+mainClass in (Compile, packageBin) := Some("de.commercetools.graphite.MongoLockReporter")
 
 dockerSettings
 
