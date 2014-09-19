@@ -1,4 +1,4 @@
-## mongodb-graphite-lock-stats
+## mongodb-graphite-stats
 
 Sends mongodb `db.serverStatus()` to the graphite.
 

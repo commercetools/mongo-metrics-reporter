@@ -24,9 +24,9 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success}
 
-object MongoLockReporter extends App {
+object MongoReporter extends App {
   val config = new Conf(ConfigFactory.load())
-  val logger = LazyLogger("de.commercetools.MongoLockReporter")
+  val logger = LazyLogger("de.commercetools.MongoReporter")
 
   init()
 
@@ -131,12 +131,6 @@ object MongoLockReporter extends App {
   def closeDriver(driver: MongoDriver): Unit = {
     driver.connections.foreach(_.mongosystem ! Close)
     driver.close()
-  }
-}
-
-object FutureHelper {
-  implicit class FutureOps[T](f: Future[T]) {
-    def awaitForever = Await.result(f, Duration.Inf)
   }
 }
 

@@ -1,7 +1,7 @@
 import sbtdocker.Plugin.DockerKeys._
 import sbt.Keys._
 
-name := "mongodb-graphite-lock-stats"
+name := "mongodb-graphite-stats"
 
 organization := "de.commercetools"
 
@@ -18,7 +18,7 @@ libraryDependencies ++= Seq(
   "com.typesafe" % "config" % "1.2.1"
 )
 
-mainClass in (Compile, packageBin) := Some("de.commercetools.graphite.MongoLockReporter")
+mainClass in (Compile, packageBin) := Some("de.commercetools.graphite.MongoReporter")
 
 dockerSettings
 
