@@ -3,30 +3,26 @@ package de.commercetools.graphite
 import java.io.{IOException, OutputStreamWriter}
 import java.net.Socket
 
+import org.slf4j.LoggerFactory
+
 import language._
 
 import java.util.concurrent.TimeUnit
-import play.api.libs.iteratee.Iteratee
-import reactivemongo.api._
-import reactivemongo.api.collections.default.BSONCollection
-import reactivemongo.bson._
-import reactivemongo.core.actors.Close
-import reactivemongo.utils.LazyLogger
 import rx.lang.scala.Observable
 import scala.concurrent.ExecutionContext.Implicits.global
-import reactivemongo.core.commands.Status
-import FutureHelper._
 import scala.concurrent.duration._
+import com.mongodb.casbah.Imports._
 
 import com.typesafe.config.{ConfigFactory, Config}
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
-import scala.util.{Failure, Success}
+import scala.util.{Try, Failure, Success}
+import scala.collection.JavaConverters._
 
 object MongoReporter extends App {
   val config = new Conf(ConfigFactory.load())
-  val logger = LazyLogger("de.commercetools.MongoReporter")
+  val logger = LoggerFactory.getLogger(this.getClass)
 
   init()
 
@@ -35,35 +31,41 @@ object MongoReporter extends App {
       s"from mongo ${config.mongo.url} " +
       s"with interval ${config.reportIntervalMs}ms and prefix '${config.graphite.graphitePrefix}'")
 
-    val driver = new MongoDriver
-    val connection = driver.connection(config.mongo.url :: Nil)
+    val mongo = MongoClient(config.mongo.url)
 
-    Observable.interval(config.reportIntervalMs milliseconds).flatMap(_ => Observable.from(getStats(connection))).subscribe(
+    Observable.interval(config.reportIntervalMs milliseconds).map(_ => getStats(mongo)).subscribe(
       onNext = {
-        case Success(stats) => sendToGraphite(stats)
-        case Failure(error) => logger.error("Can't get stats from mongo!", error)
+        case Success(stats) =>
+          sendToGraphite(stats)
+        case Failure(error) =>
+          logger.error("Can't get stats from mongo!", error)
       },
       onError = error => {
         logger.error("Error in pipeline!", error)
-        closeDriver(driver)
+        closeDriver(mongo)
       },
       onCompleted = () =>
-        closeDriver(driver)
+        closeDriver(mongo)
     )
+
+    while (true) {
+      Thread.sleep(1000)
+    }
   }
 
-  def extractStats(value: BSONValue): List[(String, Long)] = value match{
-    case BSONInteger(i) => List("" -> i.toLong)
-    case BSONDouble(d) => List("" -> d.toLong)
-    case BSONLong(l) => List("" -> l)
-    case BSONDocument(s) =>
-      s.toList.collect {case Success(pair) => pair}
-        .flatMap {case (key, v) => extractStats(v) map {case (sk, sv) => createKey(key, sk) -> sv}}
-    case _ => Nil
-  }
+  def extractStats(prefix: List[String], value: DBObject): List[(String, Long)] =
+    value.keySet().asScala.toList.flatMap { keyName =>
+      value.get(keyName) match {
+        case i: Integer => List(createKey(prefix :+ keyName: _*) -> i.toLong)
+        case d: java.lang.Double => List(createKey(prefix :+ keyName: _*) -> d.toLong)
+        case l: java.lang.Long => List(createKey(prefix :+ keyName: _*) -> (l: Long))
+        case s: DBObject => extractStats(prefix :+ keyName, s)
+        case _ => Nil
+      }
+    }
 
-  def sendToGraphite(stats: Map[String, BSONValue]) = {
-    val all = stats.toList.flatMap {case (key, value) => extractStats(value) map {case (sk, sv) => createKey(key, sk) -> sv}}
+  def sendToGraphite(stats: DBObject) = {
+    val all = extractStats(Nil, stats)
 
     try {
       write(
@@ -123,14 +125,22 @@ object MongoReporter extends App {
     "_" + m.group(0).toLowerCase()
   })
 
-  def getStats(connection: MongoConnection) =
-    connection("admin111").command(Status().command)
-      .map(s => Success(s.asInstanceOf[Map[String, BSONValue]]))
-      .recover {case error => Failure(error)}
+  def getStats(client: MongoClient): Try[DBObject] = {
+    try {
+      val res = client.getDB("admin").command(DBObject("serverStatus" -> 1))
 
-  def closeDriver(driver: MongoDriver): Unit = {
-    driver.connections.foreach(_.mongosystem ! Close)
-    driver.close()
+      if (res.ok())
+        Success(res)
+      else
+        Failure(res.getException)
+    }
+    catch {
+      case e: Exception => Failure(e)
+    }
+  }
+
+  def closeDriver(client: MongoClient): Unit = {
+    client.close()
   }
 }
 
