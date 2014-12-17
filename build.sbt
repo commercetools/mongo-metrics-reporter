@@ -1,3 +1,4 @@
+import sbtdocker.ImageName
 import sbtdocker.Plugin.DockerKeys._
 import sbt.Keys._
 
@@ -41,3 +42,6 @@ dockerfile in docker <<= (artifactPath.in(Compile, packageBin), fullClasspath in
   case (_, _, None) =>
     sys.error("Expected exactly one main class")
 }
+
+imageName in docker :=
+  ImageName(namespace = Some("tenshi"), repository = "mongodb-graphite")
