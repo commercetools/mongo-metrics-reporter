@@ -5,6 +5,7 @@
     <report-tab title="Report tab 1" buildTypeId="MongodbGraphiteStats_BuildAndPushToDockerIndex">
       <revisionRule name="lastSuccessful" revision="latest.lastSuccessful" />
     </report-tab>
+    <build-report-tab title="Build Report 1" />
   </report-tabs>
 </settings>
 
