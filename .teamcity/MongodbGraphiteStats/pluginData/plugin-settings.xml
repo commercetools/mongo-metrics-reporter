@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<settings>
+  <versionedSettings rootId="MongodbGraphiteStats_MongodbGraphiteStatsGit" enabled="true" showChanges="true" />
+  <report-tabs>
+    <report-tab title="Report tab 1" buildTypeId="MongodbGraphiteStats_BuildAndPushToDockerIndex">
+      <revisionRule name="lastSuccessful" revision="latest.lastSuccessful" />
+    </report-tab>
+  </report-tabs>
+</settings>
+
