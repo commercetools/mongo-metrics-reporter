@@ -4,7 +4,17 @@
   <description />
   <settings>
     <parameters />
-    <build-runners />
+    <build-runners>
+      <runner id="RUNNER_4" name="" type="SBT">
+        <parameters>
+          <param name="jvmArgs" value="-Xmx512m -XX:MaxPermSize=256m -XX:ReservedCodeCacheSize=128m -Dsbt.log.noformat=true -Dsbt.log.format=false" />
+          <param name="sbt.args" value="clean compile test" />
+          <param name="sbt.installationMode" value="auto" />
+          <param name="target.jdk.home" value="%env.JDK_16%" />
+          <param name="teamcity.step.mode" value="default" />
+        </parameters>
+      </runner>
+    </build-runners>
     <vcs-settings>
       <vcs-entry-ref root-id="MongodbGraphiteStats_MongodbGraphiteStatsGit" />
     </vcs-settings>
