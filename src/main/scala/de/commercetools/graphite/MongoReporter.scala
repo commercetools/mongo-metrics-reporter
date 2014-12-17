@@ -38,7 +38,7 @@ object MongoReporter extends App {
         case Success(stats) =>
           sendToGraphite(stats)
         case Failure(error) =>
-          logger.error111("Can't get stats from mongo!", error)
+          logger.error("Can't get stats from mongo!", error)
       },
       onError = error => {
         logger.error("Error in pipeline!", error)
