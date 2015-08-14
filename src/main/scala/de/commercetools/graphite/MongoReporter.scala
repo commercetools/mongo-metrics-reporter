@@ -79,13 +79,16 @@ object MongoReporter extends App {
   def write(sock: Socket, stats: List[(String, Long)]) = {
     var writer: OutputStreamWriter = null
 
+    logger.debug(s"Sending ${stats.size} points to graphite...")
+
     try {
       val epoch = System.currentTimeMillis() / 1000
 
       writer = new OutputStreamWriter(sock.getOutputStream)
 
       try {
-        stats.foreach { case (key, value) =>
+        stats.take(10).foreach { case (key, value) =>
+          println(key + " = " + value)
           writer.write("%s %.2f %d\n".formatLocal(java.util.Locale.US, key, value.doubleValue, epoch))
         }
       } catch {
@@ -104,9 +107,10 @@ object MongoReporter extends App {
         }
     } finally {
       if (sock != null) {
-        try
+        try {
+          writer.close()
           sock.close()
-        catch {
+        } catch {
           case ioe: IOException => logger.error("Error while closing socket!", ioe)
         }
       }
@@ -117,11 +121,11 @@ object MongoReporter extends App {
     .filterNot(_.isEmpty)
     .map {
       case "." => "global_lock"
-      case name => camelToUnderscores(name.replaceAll(":", "_").replaceAll("/", ".").replaceAll(" ", "_"))
+      case name => camelToUnderscores(name).replaceAll(":", "_").replaceAll("/", ".").replaceAll(" ", "_")
     }
     .mkString(".")
 
-  def camelToUnderscores(name: String) = "[A-Z\\d]".r.replaceAllIn(name, {m =>
+  def camelToUnderscores(name: String) = "[A-Z]".r.replaceAllIn(name, {m =>
     "_" + m.group(0).toLowerCase()
   })
 
@@ -142,20 +146,20 @@ object MongoReporter extends App {
   def closeDriver(client: MongoClient): Unit = {
     client.close()
   }
-}
 
-class Conf(c: Config) {
-  object graphite {
-    val host = c.getString("graphite.host")
-    val port = c.getInt("graphite.port")
-    val graphitePrefix = c.getString("graphite.prefix")
+  class Conf(c: Config) {
+    object graphite {
+      val host = c.getString("graphite.host")
+      val port = c.getInt("graphite.port")
+      val graphitePrefix = c.getString("graphite.prefix")
+    }
+
+    object mongo {
+      val host = c.getString("mongo.host")
+      val port = c.getInt("mongo.port")
+      def url = host + ":" + port
+    }
+
+    val reportIntervalMs = c.getDuration("reportInterval", TimeUnit.MILLISECONDS)
   }
-
-  object mongo {
-    val host = c.getString("mongo.host")
-    val port = c.getInt("mongo.port")
-    def url = host + ":" + port
-  }
-
-  val reportIntervalMs = c.getDuration("reportInterval", TimeUnit.MILLISECONDS)
 }

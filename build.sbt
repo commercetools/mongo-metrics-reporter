@@ -8,7 +8,7 @@ organization := "de.commercetools"
 
 version := "0.1-SNAPSHOT"
 
-scalaVersion := "2.11.4"
+scalaVersion := "2.11.7"
 
 scalacOptions ++= Seq("-deprecation", "-feature")
 
@@ -17,7 +17,8 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.0.13",
   "org.mongodb" %% "casbah" % "2.7.4",
   "org.scalaz" %% "scalaz-core" % "7.1.0",
-  "com.typesafe" % "config" % "1.2.1"
+  "com.typesafe" % "config" % "1.2.1",
+  "com.github.influxdb" % "influxdb-java" % "influxdb-java-2.0"
 )
 
 mainClass in (Compile, packageBin) := Some("de.commercetools.graphite.MongoReporter")
@@ -45,3 +46,6 @@ dockerfile in docker <<= (artifactPath.in(Compile, packageBin), fullClasspath in
 
 imageName in docker :=
   ImageName(namespace = Some("tenshi"), repository = "mongodb-graphite")
+
+resolvers +=
+  "JitPack.io" at "https://jitpack.io"
