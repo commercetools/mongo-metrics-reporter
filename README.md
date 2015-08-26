@@ -20,6 +20,11 @@ and then run it:
 
 The docker container accept following environment variables:
 
+* **REPORTER** - either "influxDb" or "graphite" (by default "influxDb")
+* **INFLUX_DB_URL** - default "http://localhost:8086"
+* **INFLUX_DB_USERNAME** - default "root"
+* **INFLUX_DB_PASSWORD** - default "root"
+* **INFLUX_DB_DATABASE_NAME** - default "test"
 * **GRAPHITE_HOST** - default "localhost"
 * **GRAPHITE_PORT** - default 2003
 * **GRAPHITE_PREFIX** - default "mongo_lock_stats"

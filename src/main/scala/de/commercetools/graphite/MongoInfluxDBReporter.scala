@@ -1,7 +1,6 @@
 package de.commercetools.graphite
 
-import java.io.{IOException, OutputStreamWriter}
-import java.net.Socket
+import java.io.IOException
 
 import org.influxdb.InfluxDB.ConsistencyLevel
 import org.influxdb.dto.{BatchPoints, Point}
@@ -12,27 +11,29 @@ import language._
 
 import java.util.concurrent.TimeUnit
 import rx.lang.scala.Observable
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import com.mongodb.casbah.Imports._
 
-import com.typesafe.config.{ConfigFactory, Config}
+import com.typesafe.config.Config
 
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
-import scala.util.{Random, Try, Failure, Success}
-import scala.collection.JavaConverters._
+import scala.util.{Try, Failure, Success}
 
-object MongoInfluxDBReporter extends App {
-  val config = new Conf(ConfigFactory.load())
+import net.ceedubs.ficus.Ficus._
+import net.ceedubs.ficus.readers.ArbitraryTypeReader._
+
+class MongoInfluxDBReporter(cfg: Config) {
   val logger = LoggerFactory.getLogger(this.getClass)
 
-  def init() = {
-    logger.info(s"Starting mongo locking reporting to InfluxDB ${config.influxDb.url} as '${config.influxDb.username}' " +
-      s"from mongo ${config.mongo.url} " +
-      s"with interval ${config.reportIntervalMs}ms.")
+  val reportIntervalMs = cfg.getDuration("reportInterval", TimeUnit.MILLISECONDS)
+  val mongoConfig = cfg.as[MongoConfig]("mongo")
+  val influxDbConfig = cfg.as[InfluxDbConfig]("influxDb")
 
-    val mongo = MongoClient(config.mongo.url)
+  def init() = {
+    logger.info(s"Starting mongo locking reporting to InfluxDB ${influxDbConfig.url} as '${influxDbConfig.username}' " +
+      s"from mongo ${mongoConfig.url} " +
+      s"with interval ${reportIntervalMs}ms.")
+
+    val mongo = MongoClient(mongoConfig.url)
 
     getStats(mongo) match {
       case Success(stats) =>
@@ -41,7 +42,7 @@ object MongoInfluxDBReporter extends App {
         logger.error("Can't get stats from mongo!", error)
     }
 
-    Observable.interval(config.reportIntervalMs milliseconds).map(_ => getStats(mongo)).subscribe(
+    Observable.interval(reportIntervalMs milliseconds).map(_ => getStats(mongo)).subscribe(
       onNext = {
         case Success(stats) =>
           sendToInfluxDB(stats)
@@ -62,7 +63,7 @@ object MongoInfluxDBReporter extends App {
   }
 
   def extractStats(value: DBObject): List[Point] = {
-    val tags = Map("databaseId" -> config.mongo.databaseId)
+    val tags = Map("databaseId" -> mongoConfig.databaseId)
     val locks = value.getObj("locks")
 
     locks.keys.toList.flatMap {
@@ -109,7 +110,7 @@ object MongoInfluxDBReporter extends App {
     def getChain(key1: String, key2: String) = value.getOrElse(key1, value.get(key2))
   }
 
-  val influxDb = InfluxDBFactory.connect(config.influxDb.url, config.influxDb.username, config.influxDb.password)
+  val influxDb = InfluxDBFactory.connect(influxDbConfig.url, influxDbConfig.username, influxDbConfig.password)
 
   def sendToInfluxDB(stats: DBObject) = {
     val all = extractStats(stats)
@@ -129,7 +130,7 @@ object MongoInfluxDBReporter extends App {
     val epoch = System.currentTimeMillis() / 1000
 
     val batch = BatchPoints
-      .database(config.influxDb.databaseName)
+      .database(influxDbConfig.databaseName)
       .retentionPolicy("default")
       .consistency(ConsistencyLevel.ALL)
       .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
@@ -162,25 +163,7 @@ object MongoInfluxDBReporter extends App {
     client.close()
   }
 
-  class Conf(c: Config) {
-    object influxDb {
-      val url = c.getString("influxDb.url")
-      val username = c.getString("influxDb.username")
-      val password = c.getString("influxDb.password")
-      val databaseName = c.getString("influxDb.databaseName")
-    }
-
-    object mongo {
-      val host = c.getString("mongo.host")
-      val port = c.getInt("mongo.port")
-      val databaseId = c.getString("mongo.databaseId")
-
-      def url = host + ":" + port
-    }
-
-    val reportIntervalMs = c.getDuration("reportInterval", TimeUnit.MILLISECONDS)
-  }
-
   init()
 }
 
+case class InfluxDbConfig(url: String, username: String, password: String, databaseName: String)

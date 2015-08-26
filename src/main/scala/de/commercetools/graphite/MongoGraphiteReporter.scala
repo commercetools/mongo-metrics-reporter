@@ -9,31 +9,34 @@ import language._
 
 import java.util.concurrent.TimeUnit
 import rx.lang.scala.Observable
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import com.mongodb.casbah.Imports._
 
-import com.typesafe.config.{ConfigFactory, Config}
+import com.typesafe.config.Config
 
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
 import scala.util.{Try, Failure, Success}
 import scala.collection.JavaConverters._
 
-object MongoReporter extends App {
-  val config = new Conf(ConfigFactory.load())
+import net.ceedubs.ficus.Ficus._
+import net.ceedubs.ficus.readers.ArbitraryTypeReader._
+
+class MongoGraphiteReporter(cfg: Config) {
   val logger = LoggerFactory.getLogger(this.getClass)
+
+  val reportIntervalMs = cfg.getDuration("reportInterval", TimeUnit.MILLISECONDS)
+  val mongoConfig = cfg.as[MongoConfig]("mongo")
+  val graphiteConfig = cfg.as[GraphiteConfig]("graphite")
 
   init()
 
   def init() = {
-    logger.info(s"Starting mongo locking reporting to ${config.graphite.host}:${config.graphite.port} " +
-      s"from mongo ${config.mongo.url} " +
-      s"with interval ${config.reportIntervalMs}ms and prefix '${config.graphite.graphitePrefix}'")
+    logger.info(s"Starting mongo locking reporting to ${graphiteConfig.host}:${graphiteConfig.port} " +
+      s"from mongo ${mongoConfig.url} " +
+      s"with interval ${reportIntervalMs}ms and prefix '${graphiteConfig.graphitePrefix}'")
 
-    val mongo = MongoClient(config.mongo.url)
+    val mongo = MongoClient(mongoConfig.url)
 
-    Observable.interval(config.reportIntervalMs milliseconds).map(_ => getStats(mongo)).subscribe(
+    Observable.interval(reportIntervalMs milliseconds).map(_ => getStats(mongo)).subscribe(
       onNext = {
         case Success(stats) =>
           sendToGraphite(stats)
@@ -69,8 +72,8 @@ object MongoReporter extends App {
 
     try {
       write(
-        new Socket(config.graphite.host, config.graphite.port),
-        all.map {case (key, value) => createKey(config.graphite.graphitePrefix, key) -> value})
+        new Socket(graphiteConfig.host, graphiteConfig.port),
+        all.map {case (key, value) => createKey(graphiteConfig.graphitePrefix, key) -> value})
     } catch {
       case e: IOException => logger.error("Error connecting to graphite!", e)
     }
@@ -163,3 +166,5 @@ object MongoReporter extends App {
     val reportIntervalMs = c.getDuration("reportInterval", TimeUnit.MILLISECONDS)
   }
 }
+
+case class GraphiteConfig(host: String, port: Int, graphitePrefix: String)
