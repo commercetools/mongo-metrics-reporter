@@ -3,7 +3,7 @@ import sbtdocker.Plugin.DockerKeys._
 import sbt.Keys._
 
 name := "mongo-metrics-reporter"
-description := "Applkication publishes mongo server stats to Graphite or InfluxDb server."
+description := "Application publishes mongo server stats to Graphite or InfluxDb server."
 
 organization := "de.commercetools"
 version := "0.1-SNAPSHOT"
@@ -30,7 +30,7 @@ docker <<= docker.dependsOn(Keys.`package`.in(Compile, packageBin))
 dockerfile in docker <<= (artifactPath.in(Compile, packageBin), fullClasspath in (Compile), mainClass.in(Compile, packageBin)) map {
   case (jarFile, cp, Some(mainClass)) =>
     new sbtdocker.Dockerfile {
-      from("dockerfile/java")
+      from("java")
       val files = cp.files.reverse.map { file =>
         val target = "/app/" + file.getName
         add(file, target)
@@ -44,7 +44,7 @@ dockerfile in docker <<= (artifactPath.in(Compile, packageBin), fullClasspath in
     sys.error("Expected exactly one main class")
 }
 
-imageName in docker := ImageName(namespace = Some("tenshi"), repository = "mongodb-graphite")
+imageName in docker := ImageName(namespace = Some("tenshi"), repository = "mongo-metrics-reporter")
 
 resolvers +=
   "JitPack.io" at "https://jitpack.io"

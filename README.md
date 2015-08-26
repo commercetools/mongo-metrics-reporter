@@ -1,20 +1,20 @@
-## mongodb-graphite-stats
+## mongo-metrics-reporter
 
-Sends mongodb `db.serverStatus()` to the graphite.
+Sends mongodb `db.serverStatus()` to the Graphite and InfluxDb.
 
 ### Run
 
 Application is distributed as a docker container, which can be found here:
 
-https://registry.hub.docker.com/u/tenshi/mongodb-graphite/
+https://registry.hub.docker.com/u/tenshi/mongo-metrics-reporter/
 
 So you just need to pull it:
 
-    docker pull tenshi/mongodb-graphite
+    docker pull tenshi/mongo-metrics-reporter
      
 and then run it:
 
-    docker run -d tenshi/mongodb-graphite
+    docker run -d tenshi/mongo-metrics-reporter
     
 ### Configure
 
@@ -39,4 +39,4 @@ So if your carbon-cache is running on 192.168.10.105:8111, mongo is on host 192.
       -e GRAPHITE_PORT=8111 \
       -e GRAPHITE_HOST=192.168.10.105 \
       -e "REPORT_INTERVAL=2 seconds" \
-      tenshi/mongodb-graphite
+      tenshi/mongo-metrics-reporter
