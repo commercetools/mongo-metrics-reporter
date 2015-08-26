@@ -28,6 +28,8 @@ class MongoInfluxDBReporter(cfg: Config) {
   val mongoConfig = cfg.as[MongoConfig]("mongo")
   val influxDbConfig = cfg.as[InfluxDbConfig]("influxDb")
 
+  val derivativeValues = scala.collection.mutable.Map[String, Long]()
+
   def init() = {
     logger.info(s"Starting mongo locking reporting to InfluxDB ${influxDbConfig.url} as '${influxDbConfig.username}' " +
       s"from mongo ${mongoConfig.url} " +
@@ -74,13 +76,25 @@ class MongoInfluxDBReporter(cfg: Config) {
 
   def lockPoints(value: DBObject, tags: Map[String, String] = Map.empty) =
     List(
-      point("lock_timeLocked_r", Map("value" -> value.getObj("timeLockedMicros").getChain("r", "R")), tags),
-      point("lock_timeLocked_w", Map("value" -> value.getObj("timeLockedMicros").getChain("w", "W")), tags),
-      point("lock_timeAcquiring_r", Map("value" -> value.getObj("timeAcquiringMicros").getChain("r", "R")), tags),
-      point("lock_timeAcquiring_w", Map("value" -> value.getObj("timeAcquiringMicros").getChain("w", "W")), tags)).flatten
+      point("lock_timeLocked_r", Map("value" -> value.getObj("timeLockedMicros").getChain("r", "R")), tags, derivative),
+      point("lock_timeLocked_w", Map("value" -> value.getObj("timeLockedMicros").getChain("w", "W")), tags, derivative),
+      point("lock_timeAcquiring_r", Map("value" -> value.getObj("timeAcquiringMicros").getChain("r", "R")), tags, derivative),
+      point("lock_timeAcquiring_w", Map("value" -> value.getObj("timeAcquiringMicros").getChain("w", "W")), tags, derivative)).flatten
 
-  def point(name: String, fields: Map[String, Any], tags: Map[String, String] = Map.empty) = {
-    val properFields = fields.toList.flatMap {case (key, value) => getRealValue(value) map (key -> _)}
+  def derivative(name: String, tags: Map[String, String], mongoValue: Any): Option[Long] = {
+    val normalized = getRealValue(mongoValue)
+
+    normalized map { norm =>
+      val key = name + "-" + tags.toVector.sortBy(_._1).map (x => x._1 + ":" + x._2).mkString("-")
+      val oldValue = derivativeValues.getOrElseUpdate(key, norm)
+
+      derivativeValues.update(key, norm)
+      norm - oldValue
+    }
+  }
+
+  def point(name: String, fields: Map[String, Any], tags: Map[String, String] = Map.empty, normalizeFn: (String, Map[String, String], Any) => Option[Long] = (_, _, v) => getRealValue(v)) = {
+    val properFields = fields.toList.flatMap {case (key, value) => normalizeFn(name, tags, value) map (key -> _)}
 
     if (properFields.nonEmpty) {
       val p = Point.measurement(name)
@@ -93,7 +107,7 @@ class MongoInfluxDBReporter(cfg: Config) {
 
   }
 
-  def getRealValue(mongoValue: Any) =
+  def getRealValue(mongoValue: Any): Option[Long] =
     mongoValue match {
       case i: Integer => Some(i.toLong)
       case d: java.lang.Double => Some(d.toLong)
@@ -103,10 +117,7 @@ class MongoInfluxDBReporter(cfg: Config) {
     }
 
   implicit class MongoHelpers(value: DBObject) {
-    def getObj(key: String) = {
-      println("key " + key + " " + value.keySet())
-      value.get(key).asInstanceOf[DBObject]
-    }
+    def getObj(key: String) = value.get(key).asInstanceOf[DBObject]
     def getChain(key1: String, key2: String) = value.getOrElse(key1, value.get(key2))
   }
 
