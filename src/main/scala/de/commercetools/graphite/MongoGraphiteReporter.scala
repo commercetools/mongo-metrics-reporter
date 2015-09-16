@@ -32,7 +32,7 @@ class MongoGraphiteReporter(cfg: Config) {
   def init() = {
     logger.info(s"Starting mongo locking reporting to ${graphiteConfig.host}:${graphiteConfig.port} " +
       s"from mongo ${mongoConfig.url} " +
-      s"with interval ${reportIntervalMs}ms and prefix '${graphiteConfig.graphitePrefix}'")
+      s"with interval ${reportIntervalMs}ms and prefix '${graphiteConfig.prefix}'")
 
     val mongo = MongoClient(mongoConfig.url)
 
@@ -73,7 +73,7 @@ class MongoGraphiteReporter(cfg: Config) {
     try {
       write(
         new Socket(graphiteConfig.host, graphiteConfig.port),
-        all.map {case (key, value) => createKey(graphiteConfig.graphitePrefix, key) -> value})
+        all.map {case (key, value) => createKey(graphiteConfig.prefix, key) -> value})
     } catch {
       case e: IOException => logger.error("Error connecting to graphite!", e)
     }
@@ -167,4 +167,4 @@ class MongoGraphiteReporter(cfg: Config) {
   }
 }
 
-case class GraphiteConfig(host: String, port: Int, graphitePrefix: String)
+case class GraphiteConfig(host: String, port: Int, prefix: String)
