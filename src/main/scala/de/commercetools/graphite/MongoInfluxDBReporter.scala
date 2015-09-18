@@ -208,7 +208,7 @@ class MongoInfluxDBReporter(cfg: Config) {
       val p = Point.measurement(name)
 
       tags foreach {case (key, value) => p.tag(key, value)}
-      properFields foreach {case (key, value) => p.field(key, value)}
+      properFields foreach {case (key, value) => p.field(key, value + "i")}
 
       Some(p.build())
     } else None
@@ -244,7 +244,9 @@ class MongoInfluxDBReporter(cfg: Config) {
   def send(db: InfluxDB, points: List[Point]) = {
     logger.debug(s"Sending ${points.size} points to InfluxDB...")
 
-    val epoch = System.currentTimeMillis() / 1000
+//    points foreach { p =>
+//      println(p.lineProtocol())
+//    }
 
     val batch = BatchPoints
       .database(influxDbConfig.databaseName)
