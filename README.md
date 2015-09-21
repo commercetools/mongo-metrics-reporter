@@ -1,5 +1,7 @@
 ## mongo-metrics-reporter
 
+[![Join the chat at https://gitter.im/commercetools/mongo-metrics-reporter](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/commercetools/mongo-metrics-reporter?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Sends mongodb `db.serverStatus()` to the Graphite and InfluxDb.
 
 ### Run
