@@ -25,6 +25,7 @@ object InfluxDBTest extends App {
     val points = (1 to 30).toList map { i =>
         val p = Point
           .measurement("request33")
+          .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
           .tag("server", Random.shuffle(servers).head)
           .tag("project", "project" + Random.nextInt(10))
           .field("aa", Random.nextInt(100).toLong)
@@ -40,7 +41,6 @@ object InfluxDBTest extends App {
       .database(db)
       .retentionPolicy("default")
       .consistency(ConsistencyLevel.ALL)
-      .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
       .build()
 
     points foreach batch.point
