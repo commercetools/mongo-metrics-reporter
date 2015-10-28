@@ -12,12 +12,12 @@ scalaVersion := "2.11.7"
 scalacOptions ++= Seq("-deprecation", "-feature")
 
 libraryDependencies ++= Seq(
-  "com.netflix.rxjava" % "rxjava-scala" % "0.18.3",
+  "com.netflix.rxjava" % "rxjava-scala" % "0.18.4",
   "ch.qos.logback" % "logback-classic" % "1.0.13",
-  "org.mongodb" %% "casbah" % "2.7.4",
-  "org.scalaz" %% "scalaz-core" % "7.1.0",
+  "org.mongodb" %% "casbah" % "2.7.5",
+  "org.scalaz" %% "scalaz-core" % "7.1.4",
   "com.typesafe" % "config" % "1.2.1",
-  "com.github.influxdb" % "influxdb-java" % "influxdb-java-2.0",
+  "org.influxdb" % "influxdb-java" % "2.0",
   "net.ceedubs" %% "ficus" % "1.1.2"
 )
 
@@ -45,6 +45,3 @@ dockerfile in docker <<= (artifactPath.in(Compile, packageBin), fullClasspath in
 }
 
 imageName in docker := ImageName(namespace = Some("tenshi"), repository = "mongo-metrics-reporter")
-
-resolvers +=
-  "JitPack.io" at "https://jitpack.io"

@@ -205,7 +205,7 @@ class MongoInfluxDBReporter(cfg: Config) {
     val properFields = fields.toList.flatMap {case (key, value) => normalizeFn(name, tags, value) map (key -> _)}
 
     if (properFields.nonEmpty) {
-      val p = Point.measurement(name)
+      val p = Point.measurement(name).time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
 
       tags foreach {case (key, value) => p.tag(key, value)}
       properFields foreach {case (key, value) => p.field(key, value + "i")}
@@ -250,9 +250,6 @@ class MongoInfluxDBReporter(cfg: Config) {
 
     val batch = BatchPoints
       .database(influxDbConfig.databaseName)
-      .retentionPolicy("default")
-      .consistency(ConsistencyLevel.ALL)
-      .time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
       .build()
 
     points foreach batch.point
