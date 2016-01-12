@@ -96,11 +96,6 @@ class MongoInfluxDBReporter(cfg: Config) {
     val backgroundFlushingPoints = List("flushes", "total_ms") flatMap (c ⇒
       point(s"backgroundFlushing_$c", Map("value" → value.getObj("backgroundFlushing").get(c)), tags, derivative))
 
-    val cursorPoints = List(
-      point("cursors_totalOpen", Map("value" → value.getObj("cursors").get("totalOpen")), tags),
-      point("cursors_totalNoTimeout", Map("value" → value.getObj("cursors").get("totalNoTimeout")), tags),
-      point("cursors_timedOut", Map("value" → value.getObj("cursors").get("timedOut")), tags, derivative))
-
     val durPoints = List(
       point("dur_commits", Map("value" → value.getObj("dur").get("commits")), tags),
       point("dur_journaledMB", Map("value" → value.getObj("dur").get("journaledMB")), tags),
@@ -136,10 +131,19 @@ class MongoInfluxDBReporter(cfg: Config) {
 
     val metrics = value.getObj("metrics")
     val commands = metrics.getObj("commands")
+    val cursor = metrics.getObj("cursor")
 
     val commandsPoints = commands.keys.toList.filterNot(_ == "<UNKNOWN>").flatMap(command ⇒
       List("failed", "total").flatMap(c ⇒
         point(s"commands_${command}_$c", Map("value" → commands.getObj(command).get(c)), tags, derivative)))
+
+    val cursorPoints = List(
+      point("cursors_timedOut", Map("value" → cursor.get("timedOut")), tags, derivative),
+      point("cursors_open_noTimeout", Map("value" → cursor.getObj("open").get("noTimeout")), tags),
+      point("cursors_open_pinned", Map("value" → cursor.getObj("open").get("pinned")), tags),
+      point("cursors_open_total", Map("value" → cursor.getObj("open").get("total")), tags),
+      point("cursors_open_singleTarget", Map("value" → cursor.getObj("open").get("singleTarget")), tags),
+      point("cursors_open_multiTarget", Map("value" → cursor.getObj("open").get("multiTarget")), tags))
 
     val documentPoints =
       List("deleted", "inserted", "returned", "updated").flatMap(c ⇒
@@ -199,7 +203,7 @@ class MongoInfluxDBReporter(cfg: Config) {
       val p = Point.measurement(name).time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
 
       tags foreach {case (key, value) ⇒ p.tag(key, value)}
-      properFields foreach {case (key, value) ⇒ p.field(key, value + "i")}
+      properFields foreach {case (key, value) ⇒ p.field(key, value)}
 
       Some(p.build())
     } else None
@@ -235,7 +239,7 @@ class MongoInfluxDBReporter(cfg: Config) {
   def send(db: InfluxDB, points: List[Point]) = {
     logger.debug(s"Sending ${points.size} points to InfluxDB...")
 
-//    points foreach { p ⇒
+//    points filterNot (_.lineProtocol().contains("commands_")) foreach { p ⇒
 //      println(p.lineProtocol())
 //    }
 

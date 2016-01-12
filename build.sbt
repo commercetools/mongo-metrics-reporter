@@ -17,7 +17,7 @@ libraryDependencies ++= Seq(
   "org.mongodb" %% "casbah" % "2.7.5",
   "org.scalaz" %% "scalaz-core" % "7.1.4",
   "com.typesafe" % "config" % "1.2.1",
-  "org.influxdb" % "influxdb-java" % "2.0",
+  "org.influxdb" % "influxdb-java" % "2.1",
   "net.ceedubs" %% "ficus" % "1.1.2"
 )
 
