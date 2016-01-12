@@ -38,24 +38,24 @@ class MongoInfluxDBReporter(cfg: Config) {
     val mongo = MongoClient(mongoConfig.url)
 
     getStats(mongo) match {
-      case Success(stats) =>
+      case Success(stats) ⇒
         sendToInfluxDB(stats)
-      case Failure(error) =>
+      case Failure(error) ⇒
         logger.error("Can't get stats from mongo!", error)
     }
 
-    Observable.interval(reportIntervalMs milliseconds).map(_ => getStats(mongo)).subscribe(
+    Observable.interval(reportIntervalMs milliseconds).map(_ ⇒ getStats(mongo)).subscribe(
       onNext = {
-        case Success(stats) =>
+        case Success(stats) ⇒
           sendToInfluxDB(stats)
-        case Failure(error) =>
+        case Failure(error) ⇒
           logger.error("Can't get stats from mongo!", error)
       },
-      onError = error => {
+      onError = error ⇒ {
         logger.error("Error in pipeline!", error)
         closeDriver(mongo)
       },
-      onCompleted = () =>
+      onCompleted = () ⇒
         closeDriver(mongo)
     )
 
@@ -65,135 +65,126 @@ class MongoInfluxDBReporter(cfg: Config) {
   }
 
   def extractStats(value: DBObject): List[Point] = {
-    val tags = Map("databaseId" -> mongoConfig.databaseId)
+    val tags = Map("databaseId" → mongoConfig.databaseId)
     val locks = value.getObj("locks")
-    val recordStatsDbs = value.getObj("recordStats").keys.filterNot(Set("accessesNotInMemory", "pageFaultExceptionsThrown").contains)
 
-    val lPoints = locks.keys.toList.flatMap {
-      case "." => lockPoints(locks.getObj("."), tags + ("project" -> "GLOBAL_LOCK"))
-      case name => lockPoints(locks.getObj(name), tags + ("project" -> name))
+    val locksPoints = locks.keys.toList.flatMap { name ⇒
+      val lockType = locks.getObj(name)
+
+      List("acquireCount", "acquireWaitCount", "timeAcquiringMicros", "deadlockCount").filter(lockType.containsField).flatMap { c ⇒
+        val metric = lockType.getObj(c)
+
+        List("r", "w", "R", "W").filter(metric.containsField).flatMap(prop ⇒
+          point(s"locks_${name}_${c}_$prop", Map("value" → metric.get(prop)), tags, derivative))
+      }
     }
 
     val connPoints = List(
-      point("connections_current", Map("value" -> value.getObj("connections").get("current")), tags),
-      point("connections_available", Map("value" -> value.getObj("connections").get("available")), tags),
-      point("connections_totalCreated", Map("value" -> value.getObj("connections").get("totalCreated")), tags, derivative))
+      point("connections_current", Map("value" → value.getObj("connections").get("current")), tags),
+      point("connections_available", Map("value" → value.getObj("connections").get("available")), tags),
+      point("connections_totalCreated", Map("value" → value.getObj("connections").get("totalCreated")), tags, derivative))
 
-    val opcountersPoints = List("insert", "query", "update", "delete", "getmore", "command") flatMap (c =>
-      point(s"opcounters_$c", Map("value" -> value.getObj("opcounters").get(c)), tags, derivative))
+    val opcountersPoints = List("insert", "query", "update", "delete", "getmore", "command") flatMap (c ⇒
+      point(s"opcounters_$c", Map("value" → value.getObj("opcounters").get(c)), tags, derivative))
 
-    val opcountersReplPoints = List("insert", "query", "update", "delete", "getmore", "command") flatMap (c =>
-      point(s"opcountersRepl_$c", Map("value" -> value.getObj("opcountersRepl").get(c)), tags, derivative))
+    val assertsPoints = List("regular", "warning", "msg", "user", "rollovers") flatMap (c ⇒
+      point(s"asserts_$c", Map("value" → value.getObj("asserts").get(c)), tags, derivative))
 
-    val backgroundFlushingPoints = List("flushes", "total_ms") flatMap (c =>
-      point(s"backgroundFlushing_$c", Map("value" -> value.getObj("backgroundFlushing").get(c)), tags, derivative))
+    val opcountersReplPoints = List("insert", "query", "update", "delete", "getmore", "command") flatMap (c ⇒
+      point(s"opcountersRepl_$c", Map("value" → value.getObj("opcountersRepl").get(c)), tags, derivative))
+
+    val backgroundFlushingPoints = List("flushes", "total_ms") flatMap (c ⇒
+      point(s"backgroundFlushing_$c", Map("value" → value.getObj("backgroundFlushing").get(c)), tags, derivative))
 
     val cursorPoints = List(
-      point("cursors_totalOpen", Map("value" -> value.getObj("cursors").get("totalOpen")), tags),
-      point("cursors_totalNoTimeout", Map("value" -> value.getObj("cursors").get("totalNoTimeout")), tags),
-      point("cursors_timedOut", Map("value" -> value.getObj("cursors").get("timedOut")), tags, derivative))
+      point("cursors_totalOpen", Map("value" → value.getObj("cursors").get("totalOpen")), tags),
+      point("cursors_totalNoTimeout", Map("value" → value.getObj("cursors").get("totalNoTimeout")), tags),
+      point("cursors_timedOut", Map("value" → value.getObj("cursors").get("timedOut")), tags, derivative))
 
     val durPoints = List(
-      point("dur_commits", Map("value" -> value.getObj("dur").get("commits")), tags),
-      point("dur_journaledMB", Map("value" -> value.getObj("dur").get("journaledMB")), tags),
-      point("dur_writeToDataFilesMB", Map("value" -> value.getObj("dur").get("writeToDataFilesMB")), tags),
-      point("dur_compression", Map("value" -> value.getObj("dur").get("compression")), tags),
-      point("dur_commitsInWriteLock", Map("value" -> value.getObj("dur").get("commitsInWriteLock")), tags),
-      point("dur_earlyCommits", Map("value" -> value.getObj("dur").get("earlyCommits")), tags),
-      point("dur_timeMs_dt", Map("value" -> value.getObj("dur").getObj("timeMs").get("dt")), tags),
-      point("dur_timeMs_prepLogBuffer", Map("value" -> value.getObj("dur").getObj("timeMs").get("prepLogBuffer")), tags),
-      point("dur_timeMs_writeToJournal", Map("value" -> value.getObj("dur").getObj("timeMs").get("writeToJournal")), tags),
-      point("dur_timeMs_writeToDataFiles", Map("value" -> value.getObj("dur").getObj("timeMs").get("writeToDataFiles")), tags),
-      point("dur_timeMs_remapPrivateView", Map("value" -> value.getObj("dur").getObj("timeMs").get("remapPrivateView")), tags))
+      point("dur_commits", Map("value" → value.getObj("dur").get("commits")), tags),
+      point("dur_journaledMB", Map("value" → value.getObj("dur").get("journaledMB")), tags),
+      point("dur_writeToDataFilesMB", Map("value" → value.getObj("dur").get("writeToDataFilesMB")), tags),
+      point("dur_compression", Map("value" → value.getObj("dur").get("compression")), tags),
+      point("dur_commitsInWriteLock", Map("value" → value.getObj("dur").get("commitsInWriteLock")), tags),
+      point("dur_earlyCommits", Map("value" → value.getObj("dur").get("earlyCommits")), tags),
+      point("dur_timeMs_dt", Map("value" → value.getObj("dur").getObj("timeMs").get("dt")), tags),
+      point("dur_timeMs_prepLogBuffer", Map("value" → value.getObj("dur").getObj("timeMs").get("prepLogBuffer")), tags),
+      point("dur_timeMs_writeToJournal", Map("value" → value.getObj("dur").getObj("timeMs").get("writeToJournal")), tags),
+      point("dur_timeMs_writeToDataFiles", Map("value" → value.getObj("dur").getObj("timeMs").get("writeToDataFiles")), tags),
+      point("dur_timeMs_remapPrivateView", Map("value" → value.getObj("dur").getObj("timeMs").get("remapPrivateView")), tags))
 
     val globalLockPoints =
-      List("totalTime", "lockTime").flatMap(c => point(s"globalLock_$c", Map("value" -> value.getObj("globalLock").get(c)), tags, derivative)) ++
+      List("totalTime", "lockTime").flatMap(c ⇒ point(s"globalLock_$c", Map("value" → value.getObj("globalLock").get(c)), tags, derivative)) ++
       List(
-        point("globalLock_currentQueue_total", Map("value" -> value.getObj("globalLock").getObj("currentQueue").get("total")), tags),
-        point("globalLock_currentQueue_readers", Map("value" -> value.getObj("globalLock").getObj("currentQueue").get("readers")), tags),
-        point("globalLock_currentQueue_writers", Map("value" -> value.getObj("globalLock").getObj("currentQueue").get("writers")), tags),
-        point("globalLock_activeClients_total", Map("value" -> value.getObj("globalLock").getObj("activeClients").get("total")), tags),
-        point("globalLock_activeClients_readers", Map("value" -> value.getObj("globalLock").getObj("activeClients").get("readers")), tags),
-        point("globalLock_activeClients_writers", Map("value" -> value.getObj("globalLock").getObj("activeClients").get("writers")), tags)).flatten
-
-    // Note: removed in 3.0
-    val indexCountersPoints =
-      List("accesses", "hits", "misses", "resets").flatMap(c =>
-        point(s"indexCounters_$c", Map("value" -> value.getObj("indexCounters").get(c)), tags, derivative))
+        point("globalLock_currentQueue_total", Map("value" → value.getObj("globalLock").getObj("currentQueue").get("total")), tags),
+        point("globalLock_currentQueue_readers", Map("value" → value.getObj("globalLock").getObj("currentQueue").get("readers")), tags),
+        point("globalLock_currentQueue_writers", Map("value" → value.getObj("globalLock").getObj("currentQueue").get("writers")), tags),
+        point("globalLock_activeClients_total", Map("value" → value.getObj("globalLock").getObj("activeClients").get("total")), tags),
+        point("globalLock_activeClients_readers", Map("value" → value.getObj("globalLock").getObj("activeClients").get("readers")), tags),
+        point("globalLock_activeClients_writers", Map("value" → value.getObj("globalLock").getObj("activeClients").get("writers")), tags)).flatten
 
     val networkPoints =
-      List("bytesIn", "bytesOut", "numRequests").flatMap(c =>
-        point(s"network_$c", Map("value" -> value.getObj("network").get(c)), tags, derivative))
-
-    // Note: removed in 3.0
-    val recordStatsPoints =
-      List(
-        point("recordStats_accessesNotInMemory_global", Map("value" -> value.getObj("recordStats").get("accessesNotInMemory")), tags, derivative),
-        point("recordStats_pageFaultExceptionsThrown_global", Map("value" -> value.getObj("recordStats").get("pageFaultExceptionsThrown")), tags, derivative)).flatten ++
-      recordStatsDbs.flatMap(db =>
-        List(
-          point("recordStats_accessesNotInMemory", Map("value" -> value.getObj("recordStats").getObj(db).get("accessesNotInMemory")), tags + ("project" -> db), derivative),
-          point("recordStats_pageFaultExceptionsThrown", Map("value" -> value.getObj("recordStats").getObj(db).get("pageFaultExceptionsThrown")), tags + ("project" -> db), derivative)).flatten)
+      List("bytesIn", "bytesOut", "numRequests").flatMap(c ⇒
+        point(s"network_$c", Map("value" → value.getObj("network").get(c)), tags, derivative))
 
     val memPoints = List(
-      point("mem_residentMb", Map("value" -> value.getObj("mem").get("resident")), tags),
-      point("mem_virtualMb", Map("value" -> value.getObj("mem").get("virtual")), tags),
-      point("mem_mappedMb", Map("value" -> value.getObj("mem").get("mapped")), tags),
-      point("mem_mappedWithJournalMb", Map("value" -> value.getObj("mem").get("mappedWithJournal")), tags))
+      point("mem_residentMb", Map("value" → value.getObj("mem").get("resident")), tags),
+      point("mem_virtualMb", Map("value" → value.getObj("mem").get("virtual")), tags),
+      point("mem_mappedMb", Map("value" → value.getObj("mem").get("mapped")), tags),
+      point("mem_mappedWithJournalMb", Map("value" → value.getObj("mem").get("mappedWithJournal")), tags))
 
     val metrics = value.getObj("metrics")
+    val commands = metrics.getObj("commands")
+
+    val commandsPoints = commands.keys.toList.filterNot(_ == "<UNKNOWN>").flatMap(command ⇒
+      List("failed", "total").flatMap(c ⇒
+        point(s"commands_${command}_$c", Map("value" → commands.getObj(command).get(c)), tags, derivative)))
 
     val documentPoints =
-      List("deleted", "inserted", "returned", "updated").flatMap(c =>
-        point(s"document_$c", Map("value" -> metrics.getObj("document").get(c)), tags, derivative))
+      List("deleted", "inserted", "returned", "updated").flatMap(c ⇒
+        point(s"document_$c", Map("value" → metrics.getObj("document").get(c)), tags, derivative))
 
     val operationPoints =
-      List("fastmod", "idhack", "scanAndOrder").flatMap(c =>
-        point(s"operation_$c", Map("value" -> metrics.getObj("operation").get(c)), tags, derivative))
+      List("fastmod", "idhack", "scanAndOrder").flatMap(c ⇒
+        point(s"operation_$c", Map("value" → metrics.getObj("operation").get(c)), tags, derivative))
 
     val queryExecutorPoints =
-      List("scanned").flatMap(c =>
-        point(s"queryExecutor_$c", Map("value" -> metrics.getObj("queryExecutor").get(c)), tags, derivative))
+      List("scanned").flatMap(c ⇒
+        point(s"queryExecutor_$c", Map("value" → metrics.getObj("queryExecutor").get(c)), tags, derivative))
 
     val recordPoints =
-      List("moves").flatMap(c =>
-        point(s"record_$c", Map("value" -> metrics.getObj("record").get(c)), tags, derivative))
+      List("moves").flatMap(c ⇒
+        point(s"record_$c", Map("value" → metrics.getObj("record").get(c)), tags, derivative))
 
     val ttlPoints =
-      List("deletedDocuments", "passes").flatMap(c =>
-        point(s"ttl_$c", Map("value" -> metrics.getObj("ttl").get(c)), tags, derivative))
+      List("deletedDocuments", "passes").flatMap(c ⇒
+        point(s"ttl_$c", Map("value" → metrics.getObj("ttl").get(c)), tags, derivative))
 
-    lPoints ++
+    locksPoints ++
       connPoints.flatten ++
       opcountersPoints ++
       opcountersReplPoints ++
+      assertsPoints ++
       backgroundFlushingPoints ++
       cursorPoints.flatten ++
       durPoints.flatten ++
       globalLockPoints ++
-      indexCountersPoints ++
       networkPoints ++
-      recordStatsPoints ++
       memPoints.flatten ++
       documentPoints ++
       operationPoints ++
       queryExecutorPoints ++
       recordPoints ++
-      ttlPoints
+      ttlPoints ++
+      commandsPoints
   }
-
-  def lockPoints(value: DBObject, tags: Map[String, String] = Map.empty) =
-    List(
-      point("lock_timeLocked_r", Map("value" -> value.getObj("timeLockedMicros").getChain("r", "R")), tags, derivative),
-      point("lock_timeLocked_w", Map("value" -> value.getObj("timeLockedMicros").getChain("w", "W")), tags, derivative),
-      point("lock_timeAcquiring_r", Map("value" -> value.getObj("timeAcquiringMicros").getChain("r", "R")), tags, derivative),
-      point("lock_timeAcquiring_w", Map("value" -> value.getObj("timeAcquiringMicros").getChain("w", "W")), tags, derivative)).flatten
 
   def derivative(name: String, tags: Map[String, String], mongoValue: Any): Option[Long] = {
     val normalized = getRealValue(mongoValue)
 
-    normalized map { norm =>
-      val key = name + "-" + tags.toVector.sortBy(_._1).map (x => x._1 + ":" + x._2).mkString("-")
+    normalized map { norm ⇒
+      val key = name + "-" + tags.toVector.sortBy(_._1).map (x ⇒ x._1 + ":" + x._2).mkString("-")
       val oldValue = derivativeValues.getOrElseUpdate(key, norm)
 
       derivativeValues.update(key, norm)
@@ -201,14 +192,14 @@ class MongoInfluxDBReporter(cfg: Config) {
     }
   }
 
-  def point(name: String, fields: Map[String, Any], tags: Map[String, String] = Map.empty, normalizeFn: (String, Map[String, String], Any) => Option[Long] = (_, _, v) => getRealValue(v)) = {
-    val properFields = fields.toList.flatMap {case (key, value) => normalizeFn(name, tags, value) map (key -> _)}
+  def point(name: String, fields: Map[String, Any], tags: Map[String, String] = Map.empty, normalizeFn: (String, Map[String, String], Any) ⇒ Option[Long] = (_, _, v) ⇒ getRealValue(v)) = {
+    val properFields = fields.toList.flatMap {case (key, value) ⇒ normalizeFn(name, tags, value) map (key → _)}
 
     if (properFields.nonEmpty) {
       val p = Point.measurement(name).time(System.currentTimeMillis(), TimeUnit.MILLISECONDS)
 
-      tags foreach {case (key, value) => p.tag(key, value)}
-      properFields foreach {case (key, value) => p.field(key, value + "i")}
+      tags foreach {case (key, value) ⇒ p.tag(key, value)}
+      properFields foreach {case (key, value) ⇒ p.field(key, value + "i")}
 
       Some(p.build())
     } else None
@@ -217,11 +208,11 @@ class MongoInfluxDBReporter(cfg: Config) {
 
   def getRealValue(mongoValue: Any): Option[Long] =
     mongoValue match {
-      case i: Integer => Some(i.toLong)
-      case d: java.lang.Double => Some(d.toLong)
-      case l: java.lang.Long => Some(l)
-      case null => None
-      case _ => throw new IllegalStateException(s"Unsupported mongo value: $mongoValue")
+      case i: Integer ⇒ Some(i.toLong)
+      case d: java.lang.Double ⇒ Some(d.toLong)
+      case l: java.lang.Long ⇒ Some(l)
+      case null ⇒ None
+      case _ ⇒ throw new IllegalStateException(s"Unsupported mongo value: $mongoValue")
     }
 
   implicit class MongoHelpers(value: DBObject) {
@@ -237,14 +228,14 @@ class MongoInfluxDBReporter(cfg: Config) {
     try {
       send(influxDb, all)
     } catch {
-      case e: IOException => logger.error("Error sending stat to InfluxDB!", e)
+      case e: IOException ⇒ logger.error("Error sending stat to InfluxDB!", e)
     }
   }
 
   def send(db: InfluxDB, points: List[Point]) = {
     logger.debug(s"Sending ${points.size} points to InfluxDB...")
 
-//    points foreach { p =>
+//    points foreach { p ⇒
 //      println(p.lineProtocol())
 //    }
 
@@ -257,13 +248,13 @@ class MongoInfluxDBReporter(cfg: Config) {
     try {
       db.write(batch)
     } catch {
-      case e: Exception => logger.error("Error writing data to InfluxDB!", e)
+      case e: Exception ⇒ logger.error("Error writing data to InfluxDB!", e)
     }
   }
 
   def getStats(client: MongoClient): Try[DBObject] = {
     try {
-      val res = client.getDB("admin").command(DBObject("serverStatus" -> 1))
+      val res = client.getDB("admin").command(DBObject("serverStatus" → 1))
 
       if (res.ok())
         Success(res)
@@ -271,7 +262,7 @@ class MongoInfluxDBReporter(cfg: Config) {
         Failure(res.getException)
     }
     catch {
-      case e: Exception => Failure(e)
+      case e: Exception ⇒ Failure(e)
     }
   }
 
