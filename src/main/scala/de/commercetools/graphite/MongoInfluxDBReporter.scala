@@ -269,9 +269,9 @@ class MongoInfluxDBReporter(cfg: Config) {
   def send(db: InfluxDB, points: List[Point]) = {
     logger.debug(s"Sending ${points.size} points to InfluxDB...")
 
-    points foreach { p ⇒
-      println(p.lineProtocol())
-    }
+//    points foreach { p ⇒
+//      println(p.lineProtocol())
+//    }
 
     val batch = BatchPoints
       .database(influxDbConfig.databaseName)
