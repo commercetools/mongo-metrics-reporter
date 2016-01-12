@@ -93,21 +93,29 @@ class MongoInfluxDBReporter(cfg: Config) {
     val opcountersReplPoints = List("insert", "query", "update", "delete", "getmore", "command") flatMap (c ⇒
       point(s"opcountersRepl_$c", Map("value" → value.getObj("opcountersRepl").get(c)), tags, derivative))
 
-    val backgroundFlushingPoints = List("flushes", "total_ms") flatMap (c ⇒
-      point(s"backgroundFlushing_$c", Map("value" → value.getObj("backgroundFlushing").get(c)), tags, derivative))
+    val backgroundFlushingPoints =
+      if (value containsField "backgroundFlushing")
+        List("flushes", "total_ms") flatMap (c ⇒
+          point(s"backgroundFlushing_$c", Map("value" → value.getObj("backgroundFlushing").get(c)), tags, derivative))
+      else
+        Nil
 
-    val durPoints = List(
-      point("dur_commits", Map("value" → value.getObj("dur").get("commits")), tags),
-      point("dur_journaledMB", Map("value" → value.getObj("dur").get("journaledMB")), tags),
-      point("dur_writeToDataFilesMB", Map("value" → value.getObj("dur").get("writeToDataFilesMB")), tags),
-      point("dur_compression", Map("value" → value.getObj("dur").get("compression")), tags),
-      point("dur_commitsInWriteLock", Map("value" → value.getObj("dur").get("commitsInWriteLock")), tags),
-      point("dur_earlyCommits", Map("value" → value.getObj("dur").get("earlyCommits")), tags),
-      point("dur_timeMs_dt", Map("value" → value.getObj("dur").getObj("timeMs").get("dt")), tags),
-      point("dur_timeMs_prepLogBuffer", Map("value" → value.getObj("dur").getObj("timeMs").get("prepLogBuffer")), tags),
-      point("dur_timeMs_writeToJournal", Map("value" → value.getObj("dur").getObj("timeMs").get("writeToJournal")), tags),
-      point("dur_timeMs_writeToDataFiles", Map("value" → value.getObj("dur").getObj("timeMs").get("writeToDataFiles")), tags),
-      point("dur_timeMs_remapPrivateView", Map("value" → value.getObj("dur").getObj("timeMs").get("remapPrivateView")), tags))
+    val durPoints =
+      if (value containsField "dur")
+        List(
+          point("dur_commits", Map("value" → value.getObj("dur").get("commits")), tags),
+          point("dur_journaledMB", Map("value" → value.getObj("dur").get("journaledMB")), tags),
+          point("dur_writeToDataFilesMB", Map("value" → value.getObj("dur").get("writeToDataFilesMB")), tags),
+          point("dur_compression", Map("value" → value.getObj("dur").get("compression")), tags),
+          point("dur_commitsInWriteLock", Map("value" → value.getObj("dur").get("commitsInWriteLock")), tags),
+          point("dur_earlyCommits", Map("value" → value.getObj("dur").get("earlyCommits")), tags),
+          point("dur_timeMs_dt", Map("value" → value.getObj("dur").getObj("timeMs").get("dt")), tags),
+          point("dur_timeMs_prepLogBuffer", Map("value" → value.getObj("dur").getObj("timeMs").get("prepLogBuffer")), tags),
+          point("dur_timeMs_writeToJournal", Map("value" → value.getObj("dur").getObj("timeMs").get("writeToJournal")), tags),
+          point("dur_timeMs_writeToDataFiles", Map("value" → value.getObj("dur").getObj("timeMs").get("writeToDataFiles")), tags),
+          point("dur_timeMs_remapPrivateView", Map("value" → value.getObj("dur").getObj("timeMs").get("remapPrivateView")), tags))
+      else
+        Nil
 
     val globalLockPoints =
       List("totalTime", "lockTime").flatMap(c ⇒ point(s"globalLock_$c", Map("value" → value.getObj("globalLock").get(c)), tags, derivative)) ++
@@ -165,6 +173,12 @@ class MongoInfluxDBReporter(cfg: Config) {
       List("deletedDocuments", "passes").flatMap(c ⇒
         point(s"ttl_$c", Map("value" → metrics.getObj("ttl").get(c)), tags, derivative))
 
+    val wiredTigerPoints =
+      if (value containsField "wiredTiger")
+        collectProperties(value, "wiredTiger", "uri" :: Nil, tags)
+      else
+        Nil
+
     locksPoints ++
       connPoints.flatten ++
       opcountersPoints ++
@@ -181,7 +195,23 @@ class MongoInfluxDBReporter(cfg: Config) {
       queryExecutorPoints ++
       recordPoints ++
       ttlPoints ++
-      commandsPoints
+      commandsPoints ++
+      wiredTigerPoints
+  }
+
+  def collectProperties(value: DBObject, prop: String, excludeProps: List[String], tags: Map[String, String], path: List[String] = Nil): List[Point] = {
+    val curr = value.getObj(prop)
+    val names = curr.keys.filterNot(excludeProps.contains).toList
+
+    curr.get(names.head) match {
+      case _: DBObject ⇒
+        names.flatMap(name ⇒ collectProperties(curr, name, excludeProps, tags, path :+ prop))
+      case _ ⇒
+        val metricName = (path :+ prop) mkString "_"
+        val metricValues = names.map(name ⇒ name → curr.get(name)).toMap
+
+        point(metricName, metricValues, tags).toList
+    }
   }
 
   def derivative(name: String, tags: Map[String, String], mongoValue: Any): Option[Long] = {
@@ -239,9 +269,9 @@ class MongoInfluxDBReporter(cfg: Config) {
   def send(db: InfluxDB, points: List[Point]) = {
     logger.debug(s"Sending ${points.size} points to InfluxDB...")
 
-//    points filterNot (_.lineProtocol().contains("commands_")) foreach { p ⇒
-//      println(p.lineProtocol())
-//    }
+    points foreach { p ⇒
+      println(p.lineProtocol())
+    }
 
     val batch = BatchPoints
       .database(influxDbConfig.databaseName)
@@ -264,8 +294,7 @@ class MongoInfluxDBReporter(cfg: Config) {
         Success(res)
       else
         Failure(res.getException)
-    }
-    catch {
+    } catch {
       case e: Exception ⇒ Failure(e)
     }
   }
