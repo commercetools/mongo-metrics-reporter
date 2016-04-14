@@ -81,7 +81,7 @@ class MongoInfluxDBReporter(cfg: Config) {
   }
 
   def extractStats(value: DBObject, url: String): List[Point] = {
-    val tags = Map("host" → extractHost(url))
+    val tags = Map("host" → (if (influxDbConfig.extractHost) extractHost(url) else url))
     val locks = value.getObj("locks")
 
     val locksPoints = locks.keys.toList.flatMap { name ⇒
@@ -279,14 +279,14 @@ class MongoInfluxDBReporter(cfg: Config) {
     val all = extractStats(stats, url)
 
     try {
-      send(influxDb, all)
+      send(influxDb, all, url)
     } catch {
       case e: IOException ⇒ logger.error("Error sending stat to InfluxDB!", e)
     }
   }
 
-  def send(db: InfluxDB, points: List[Point]) = {
-    logger.debug(s"Sending ${points.size} points to InfluxDB...")
+  def send(db: InfluxDB, points: List[Point], url: String) = {
+    logger.debug(s"Sending ${points.size} points from '$url' to InfluxDB...")
 
 //    points foreach { p ⇒
 //      println(p.lineProtocol())
@@ -325,4 +325,4 @@ class MongoInfluxDBReporter(cfg: Config) {
   init()
 }
 
-case class InfluxDbConfig(url: String, username: String, password: String, databaseName: String)
+case class InfluxDbConfig(url: String, username: String, password: String, databaseName: String, extractHost: Boolean)

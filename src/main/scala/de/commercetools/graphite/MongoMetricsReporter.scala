@@ -10,9 +10,6 @@ import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 object MongoMetricsReporter extends App {
   val config = ConfigFactory.load()
 
-  val mongoConfig = config.as[MongoConfig]("mongo")
-  println(mongoConfig.urls)
-
   config.as[String]("reporter") match {
     case "influxDb" => new MongoInfluxDBReporter(config)
     case "graphite" => new MongoGraphiteReporter(config)
