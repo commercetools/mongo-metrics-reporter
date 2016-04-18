@@ -1,3 +1,9 @@
+## v2.3 (2016-04-18)
+
+* Added support for multiple mongo hosts in influxDB reporter. Metrics would be reported for every provided host independently. 
+  This change also replaces `databaseId` with the host name (you can include/exclude port in the config)  
+* Added support for mongo host auto-discovery. 
+  
 ## v2.2 (2016-01-12)
 
 * Updated to official influxdb-java v2.1 driver
