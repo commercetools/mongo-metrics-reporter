@@ -24,6 +24,8 @@ import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 
 import scala.collection.mutable.{Map ⇒ MutableMap}
 
+import scala.collection.JavaConverters._
+
 class MongoInfluxDBReporter(cfg: Config) {
   val logger = LoggerFactory.getLogger(this.getClass)
 
@@ -39,7 +41,7 @@ class MongoInfluxDBReporter(cfg: Config) {
       s"with interval ${reportIntervalMs}ms.")
 
     def getAllStats() = {
-      mongoConfig.urls.foreach { url ⇒
+      discoverMongoHosts().foreach { url ⇒
         val mongo = MongoClient(url)
 
         getStats(mongo) match {
@@ -47,7 +49,7 @@ class MongoInfluxDBReporter(cfg: Config) {
             sendToInfluxDB(stats, url)
             closeDriver(mongo)
           case Failure(error) ⇒
-            logger.error(s"Can't get stats from mongo '$url'!", error)
+            logger.error(s"Can't get stats from mongo '$url': " + error.getMessage)
             closeDriver(mongo)
         }
       }
@@ -63,6 +65,51 @@ class MongoInfluxDBReporter(cfg: Config) {
       onCompleted = () ⇒ logger.info("Finished!"))
 
     keepThreadAlive()
+  }
+
+  def discoverMongoHosts(): List[String] =
+    if (mongoConfig.discoverMembers) {
+      val discovered = doDiscoverMembers(mongoConfig.urls).filterNot(_._2 == NodeType.Other)
+
+      logger.debug("Discovered nodes: " + discovered.map{case (host, tpe) ⇒ host + (if (tpe == NodeType.Primary) " (P)" else "")}.mkString(", "))
+
+      val relevant =
+        if (mongoConfig.primaryOnly)
+          discovered.filter(_._2 == NodeType.Primary)
+        else
+          discovered
+
+      relevant.map(_._1)
+    } else {
+      mongoConfig.urls
+    }
+
+  def doDiscoverMembers(urls: List[String]): List[(String, NodeType.Value)] = {
+    val Success(results) = urls.view
+      .map(url ⇒ Try {
+        val res = MongoClient(url).getDB("admin").command(DBObject("replSetGetStatus" → 1))
+
+        if (res.ok())
+          res
+        else
+          throw res.getException
+      }.recover {
+        case e: Exception ⇒
+          logger.error(s"Can't connect to mongo host '$url' in order to discover other other nodes (will try to use other hosts, if available):" + e.getMessage)
+          throw e
+      })
+      .find(_.isSuccess)
+      .getOrElse(throw new IllegalStateException("Can't discover any mongo host because of the errors! Tried all of the provided hosts, but all of them result in error, which you can find in the logs above!"))
+
+    results.getObjArr("members").map { obj ⇒
+      val tpe = Option(obj.get("stateStr").asInstanceOf[String]).map {
+        case "PRIMARY" ⇒ NodeType.Primary
+        case "SECONDARY" ⇒ NodeType.Secondary
+        case _ ⇒ NodeType.Other
+      }.getOrElse(NodeType.Other)
+
+      obj.get("name").asInstanceOf[String] → tpe
+    }.toList
   }
 
   def extractHost(url: String) = {
@@ -270,6 +317,7 @@ class MongoInfluxDBReporter(cfg: Config) {
 
   implicit class MongoHelpers(value: DBObject) {
     def getObj(key: String) = value.get(key).asInstanceOf[DBObject]
+    def getObjArr(key: String): Seq[DBObject] = value.get(key).asInstanceOf[BasicDBList].asScala.asInstanceOf[Seq[DBObject]]
     def getChain(key1: String, key2: String) = value.getOrElse(key1, value.get(key2))
   }
 
@@ -323,6 +371,10 @@ class MongoInfluxDBReporter(cfg: Config) {
   }
 
   init()
+}
+
+object NodeType extends Enumeration {
+  val Primary, Secondary, Other = Value
 }
 
 case class InfluxDbConfig(url: String, username: String, password: String, databaseName: String, extractHost: Boolean)

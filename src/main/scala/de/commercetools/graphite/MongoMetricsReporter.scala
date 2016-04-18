@@ -17,9 +17,8 @@ object MongoMetricsReporter extends App {
   }
 }
 
-case class MongoConfig(hosts: Option[String], mongosHost: Option[String], mongosPort: Option[Int], host: String, port: Int) {
+case class MongoConfig(hosts: Option[String], host: String, port: Int, discoverMembers: Boolean, primaryOnly: Boolean) {
   lazy val url = host + ":" + port
-  lazy val mongosUrl = for {h ← mongosHost; p ← mongosPort} yield h + ":" + p
 
   lazy val parsedHosts =
     hosts.fold(Nil: List[String])(_.split("\\s*,\\s*").toList)
