@@ -149,7 +149,7 @@ class MongoInfluxDBReporter(cfg: Config) {
 
     val extraInfoPoints = List(
       point("extra_info_heap_usage_bytes", Map("value" → value.getObj("extra_info").get("heap_usage_bytes")), tags),
-      point("extra_info_heap_usage_bytes", Map("value" → value.getObj("extra_info").get("heap_usage_bytes")), tags),
+      point("extra_info_page_faults", Map("value" → value.getObj("extra_info").get("page_faults")), tags, derivative(url)),
       primary.flatMap(p ⇒ point("extra_info_primary", Map("value" → (if (p) 1 else 0)), tags)))
 
     val opcountersPoints = List("insert", "query", "update", "delete", "getmore", "command") flatMap (c ⇒
