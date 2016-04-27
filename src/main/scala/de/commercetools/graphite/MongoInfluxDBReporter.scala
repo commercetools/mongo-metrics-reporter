@@ -41,12 +41,12 @@ class MongoInfluxDBReporter(cfg: Config) {
       s"with interval ${reportIntervalMs}ms.")
 
     def getAllStats() = {
-      discoverMongoHosts().foreach { url ⇒
+      discoverMongoHosts().foreach { case (url, primary) ⇒
         val mongo = MongoClient(url)
 
         getStats(mongo) match {
           case Success(stats) ⇒
-            sendToInfluxDB(stats, url)
+            sendToInfluxDB(stats, url, primary)
             closeDriver(mongo)
           case Failure(error) ⇒
             logger.error(s"Can't get stats from mongo '$url': " + error.getMessage)
@@ -67,7 +67,7 @@ class MongoInfluxDBReporter(cfg: Config) {
     keepThreadAlive()
   }
 
-  def discoverMongoHosts(): List[String] =
+  def discoverMongoHosts(): List[(String, Option[Boolean])] =
     if (mongoConfig.discoverMembers) {
       val discovered = doDiscoverMembers(mongoConfig.urls).filterNot(_._2 == NodeType.Other)
 
@@ -79,9 +79,9 @@ class MongoInfluxDBReporter(cfg: Config) {
         else
           discovered
 
-      relevant.map(_._1)
+      relevant.map(i ⇒ i._1 → Some(i._2 == NodeType.Primary))
     } else {
-      mongoConfig.urls
+      mongoConfig.urls.map(_ → None)
     }
 
   def doDiscoverMembers(urls: List[String]): List[(String, NodeType.Value)] = {
@@ -127,7 +127,7 @@ class MongoInfluxDBReporter(cfg: Config) {
     }
   }
 
-  def extractStats(value: DBObject, url: String): List[Point] = {
+  def extractStats(value: DBObject, url: String, primary: Option[Boolean]): List[Point] = {
     val tags = Map("host" → (if (influxDbConfig.extractHost) extractHost(url) else url))
     val locks = value.getObj("locks")
 
@@ -146,6 +146,11 @@ class MongoInfluxDBReporter(cfg: Config) {
       point("connections_current", Map("value" → value.getObj("connections").get("current")), tags),
       point("connections_available", Map("value" → value.getObj("connections").get("available")), tags),
       point("connections_totalCreated", Map("value" → value.getObj("connections").get("totalCreated")), tags, derivative(url)))
+
+    val extraInfoPoints = List(
+      point("extra_info_heap_usage_bytes", Map("value" → value.getObj("extra_info").get("heap_usage_bytes")), tags),
+      point("extra_info_heap_usage_bytes", Map("value" → value.getObj("extra_info").get("heap_usage_bytes")), tags),
+      primary.flatMap(p ⇒ point("extra_info_primary", Map("value" → (if (p) 1 else 0)), tags)))
 
     val opcountersPoints = List("insert", "query", "update", "delete", "getmore", "command") flatMap (c ⇒
       point(s"opcounters_$c", Map("value" → value.getObj("opcounters").get(c)), tags, derivative(url)))
@@ -259,7 +264,8 @@ class MongoInfluxDBReporter(cfg: Config) {
       recordPoints ++
       ttlPoints ++
       commandsPoints ++
-      wiredTigerPoints
+      wiredTigerPoints ++
+      extraInfoPoints.flatten
   }
 
   def collectProperties(value: DBObject, prop: String, excludeProps: List[String], tags: Map[String, String], path: List[String] = Nil): List[Point] = {
@@ -323,8 +329,8 @@ class MongoInfluxDBReporter(cfg: Config) {
 
   val influxDb = InfluxDBFactory.connect(influxDbConfig.url, influxDbConfig.username, influxDbConfig.password)
 
-  def sendToInfluxDB(stats: DBObject, url: String) = {
-    val all = extractStats(stats, url)
+  def sendToInfluxDB(stats: DBObject, url: String, primary: Option[Boolean]) = {
+    val all = extractStats(stats, url, primary)
 
     try {
       send(influxDb, all, url)

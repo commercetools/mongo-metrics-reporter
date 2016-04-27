@@ -30,7 +30,7 @@ docker <<= docker.dependsOn(Keys.`package`.in(Compile, packageBin))
 dockerfile in docker <<= (artifactPath.in(Compile, packageBin), fullClasspath in (Compile), mainClass.in(Compile, packageBin)) map {
   case (jarFile, cp, Some(mainClass)) =>
     new sbtdocker.Dockerfile {
-      from("java")
+      from("develar/java:8u45")
       val files = cp.files.reverse.map { file =>
         val target = "/app/" + file.getName
         add(file, target)
