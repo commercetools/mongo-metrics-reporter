@@ -1,3 +1,7 @@
+## v2.5 (2016-04-27)
+
+* Minor bugfix in reporting page faults
+
 ## v2.4 (2016-04-27)
 
 * Handle extra_info section of stats (#11).
