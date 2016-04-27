@@ -1,3 +1,8 @@
+## v2.4 (2016-04-27)
+
+* Handle extra_info section of stats (#11).
+* Include a boolean which shows whether mongod is primary or not (#10).
+
 ## v2.3 (2016-04-18)
 
 * Added support for multiple mongo hosts in influxDB reporter. Metrics would be reported for every provided host independently. 
