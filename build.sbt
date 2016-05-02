@@ -12,7 +12,7 @@ scalaVersion := "2.11.8"
 scalacOptions ++= Seq("-deprecation", "-feature")
 
 libraryDependencies ++= Seq(
-  "com.netflix.rxjava" % "rxjava-scala" % "0.18.4",
+  "com.netflix.rxjava" % "rxjava-scala" % "0.20.7",
   "ch.qos.logback" % "logback-classic" % "1.0.13",
   "org.mongodb" %% "casbah" % "2.8.2",
   "com.typesafe" % "config" % "1.2.1",
