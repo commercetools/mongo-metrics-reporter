@@ -8,7 +8,7 @@ description := "Application publishes mongo server stats to Graphite or InfluxDb
 organization := "de.commercetools"
 version := "2.6-SNAPSHOT"
 
-scalaVersion := "2.11.7"
+scalaVersion := "2.11.8"
 scalacOptions ++= Seq("-deprecation", "-feature")
 
 libraryDependencies ++= Seq(
