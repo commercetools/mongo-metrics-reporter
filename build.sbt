@@ -15,7 +15,6 @@ libraryDependencies ++= Seq(
   "com.netflix.rxjava" % "rxjava-scala" % "0.18.4",
   "ch.qos.logback" % "logback-classic" % "1.0.13",
   "org.mongodb" %% "casbah" % "2.7.5",
-  "org.scalaz" %% "scalaz-core" % "7.1.4",
   "com.typesafe" % "config" % "1.2.1",
   "org.influxdb" % "influxdb-java" % "2.1",
   "net.ceedubs" %% "ficus" % "1.1.2"
