@@ -35,6 +35,12 @@ class MongoInfluxDBReporter(cfg: Config) {
 
   val derivativeValues = TrieMap[String, MutableMap[String, Long]]()
 
+  def withMongoClient[R](url: String)(f: MongoClient ⇒ R): R = {
+    val mongo = MongoClient(url)
+    try f(mongo)
+    finally closeDriver(mongo)
+  }
+
   def init() = {
     logger.info(s"Starting mongo locking reporting to InfluxDB ${influxDbConfig.url} as '${influxDbConfig.username}' " +
       s"from mongo ${mongoConfig.urls mkString ", "} " +
@@ -42,15 +48,13 @@ class MongoInfluxDBReporter(cfg: Config) {
 
     def getAllStats() = {
       discoverMongoHosts().foreach { case (url, primary) ⇒
-        val mongo = MongoClient(url)
-
-        getStats(mongo) match {
-          case Success(stats) ⇒
-            sendToInfluxDB(stats, url, primary)
-            closeDriver(mongo)
-          case Failure(error) ⇒
-            logger.error(s"Can't get stats from mongo '$url': " + error.getMessage)
-            closeDriver(mongo)
+        withMongoClient(url) { mongo ⇒
+          getStats(mongo) match {
+            case Success(stats) ⇒
+              sendToInfluxDB(stats, url, primary)
+            case Failure(error) ⇒
+              logger.error(s"Can't get stats from mongo '$url': " + error.getMessage)
+          }
         }
       }
     }
@@ -87,12 +91,14 @@ class MongoInfluxDBReporter(cfg: Config) {
   def doDiscoverMembers(urls: List[String]): List[(String, NodeType.Value)] = {
     val Success(results) = urls.view
       .map(url ⇒ Try {
-        val res = MongoClient(url).getDB("admin").command(DBObject("replSetGetStatus" → 1))
+        withMongoClient(url) { client ⇒
+          val res = client.getDB("admin").command(DBObject("replSetGetStatus" → 1))
 
-        if (res.ok())
-          res
-        else
-          throw res.getException
+          if (res.ok())
+            res
+          else
+            throw res.getException
+        }
       }.recover {
         case e: Exception ⇒
           logger.error(s"Can't connect to mongo host '$url' in order to discover other other nodes (will try to use other hosts, if available):" + e.getMessage)
