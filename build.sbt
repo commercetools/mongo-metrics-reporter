@@ -6,7 +6,7 @@ name := "mongo-metrics-reporter"
 description := "Application publishes mongo server stats to Graphite or InfluxDb server."
 
 organization := "de.commercetools"
-version := "2.6-SNAPSHOT"
+version := "2.7-SNAPSHOT"
 
 scalaVersion := "2.11.8"
 scalacOptions ++= Seq("-deprecation", "-feature")
