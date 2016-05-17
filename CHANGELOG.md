@@ -1,3 +1,7 @@
+## v2.6 (2016-05-17)
+
+* fix connection leak when discovering members (#13)
+
 ## v2.5 (2016-04-27)
 
 * Minor bugfix in reporting page faults
