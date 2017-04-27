@@ -8,23 +8,22 @@ import org.influxdb.{InfluxDB, InfluxDBFactory}
 import org.slf4j.LoggerFactory
 
 import language._
-
 import java.util.concurrent.TimeUnit
+
 import rx.lang.scala.Observable
+
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 import com.mongodb.casbah.Imports._
-
 import com.typesafe.config.Config
 
-import scala.util.{Try, Failure, Success}
-
+import scala.util.{Failure, Success, Try}
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 
-import scala.collection.mutable.{Map ⇒ MutableMap}
-
+import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 class MongoInfluxDBReporter(cfg: Config) {
   val logger = LoggerFactory.getLogger(this.getClass)
@@ -47,15 +46,20 @@ class MongoInfluxDBReporter(cfg: Config) {
       s"with interval ${reportIntervalMs}ms.")
 
     def getAllStats() = {
-      discoverMongoHosts().foreach { case (url, primary) ⇒
-        withMongoClient(url) { mongo ⇒
-          getStats(mongo) match {
-            case Success(stats) ⇒
-              sendToInfluxDB(stats, url, primary)
-            case Failure(error) ⇒
-              logger.error(s"Can't get stats from mongo '$url': " + error.getMessage)
+      try {
+        discoverMongoHosts().foreach { case (url, primary) ⇒
+          withMongoClient(url) { mongo ⇒
+            getStats(mongo) match {
+              case Success(stats) ⇒
+                sendToInfluxDB(stats, url, primary)
+              case Failure(error) ⇒
+                logger.error(s"Can't get stats from mongo '$url': " + error.getMessage)
+            }
           }
         }
+      } catch {
+        case NonFatal(error) ⇒
+          logger.error(s"Unexpected error. Discovery will be retried. ", error)
       }
     }
 
